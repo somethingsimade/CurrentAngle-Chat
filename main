@@ -136,6 +136,7 @@ local function hook(plr,ch)
 end
 
 local function add(plr)
+	if plr == P.LocalPlayer then return end
 	plr.CharacterAdded:Connect(function(ch) hook(plr,ch) end)
 	if plr.Character then hook(plr,plr.Character) end
 end
