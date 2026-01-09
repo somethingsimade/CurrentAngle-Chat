@@ -1,0 +1,37 @@
+local function sendmsg(msg)
+if string.len(msg) > 233 then --// roblox doesnt accept a packet that large --// 247
+return
+end
+local local_player = game:GetService("Players").LocalPlayer
+local animate = local_player.Character.Animate
+local idle_anim = animate.idle.Animation1
+
+local old_animid = idle_anim.AnimationId
+animate.Enabled = true
+idle_anim.AnimationId = "active://[CURRENTANGLE]" .. msg
+task.wait()
+animate.Enabled = false
+animate.Enabled = true
+idle_anim.AnimationId = old_animid
+task.wait()
+animate.Enabled = false
+animate.Enabled = true
+end
+
+local scriptcontext = game:GetService("ScriptContext")
+scriptcontext.Error:Connect(function(msg, stacktrace, _script)
+if _script then
+local player = game.Players:GetPlayerFromCharacter(_script.Parent)
+local name = tostring(player) --// tostring is faster than accessing .Name
+end
+local msgtextafter = "active://[CURRENTANGLE]"
+if msg:find("[CURRENTANGLE]") then
+local a = string.find(msg, msgtextafter, 1, true)
+if a then
+    local final = string.sub(msg, a + #msgtextafter)
+    return print(final)
+end
+end
+end)
+
+sendmsg("hi")
