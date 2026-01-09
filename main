@@ -1,37 +1,147 @@
+local function enc(s)
+	if #s>252 then error("max252bytes") end
+	local t=table.create(#s)
+	for i=1,#s do
+		local b=string.byte(s,i)
+		local a=math.floor(b/100)
+		local c=math.floor((b%100)/10)
+		local d=b%10
+		t[i]=string.char(48+a,48+c,48+d)
+	end
+	return table.concat(t)
+end
+
+local function dec(ns)
+	if #ns%3~=0 then error("badlen") end
+	local n=#ns/3
+	if n>255 then error("max255bytes") end
+	local out=table.create(n)
+	local j=1
+	for i=1,#ns,3 do
+		local a=string.byte(ns,i)-48
+		local b=string.byte(ns,i+1)-48
+		local c=string.byte(ns,i+2)-48
+		out[j]=string.char(a*100+b*10+c)
+		j+=1
+	end
+	return table.concat(out)
+end
+
+local function firstDigit(str)
+	local str = tostring(str)
+	local two = string.sub(str, 1, 1)
+
+	return two
+end
+
 local function sendmsg(msg)
-if string.len(msg) > 233 then --// roblox doesnt accept a packet that large --// 247
-return
-end
-local local_player = game:GetService("Players").LocalPlayer
-local animate = local_player.Character.Animate
-local idle_anim = animate.idle.Animation1
-
-local old_animid = idle_anim.AnimationId
-animate.Enabled = true
-idle_anim.AnimationId = "active://[CURRENTANGLE]" .. msg
-task.wait()
-animate.Enabled = false
-animate.Enabled = true
-idle_anim.AnimationId = old_animid
-task.wait()
-animate.Enabled = false
-animate.Enabled = true
+	local msgid = "rbxassetid://0" .. firstDigit(game.Players.LocalPlayer.UserId) .. "0" .. enc(msg)
+	local a = Instance.new("Animation")
+	a.AnimationId = msgid
+	game.Players.LocalPlayer.Character.Humanoid:LoadAnimation(a):Play()
 end
 
-local scriptcontext = game:GetService("ScriptContext")
-scriptcontext.Error:Connect(function(msg, stacktrace, _script)
-if _script then
-local player = game.Players:GetPlayerFromCharacter(_script.Parent)
-local name = tostring(player) --// tostring is faster than accessing .Name
+local TextChatService = game:GetService("TextChatService")
+
+local NAME_COLORS = {
+	Color3.fromRGB(253, 41, 67),   -- red
+	Color3.fromRGB(1, 162, 255),   -- blue
+	Color3.fromRGB(2, 184, 87),    -- green
+	Color3.fromRGB(170, 85, 255),  -- purple
+	Color3.fromRGB(255, 170, 0),   -- orange
+	Color3.fromRGB(255, 255, 0),   -- yellow
+	Color3.fromRGB(255, 102, 204), -- pink
+	Color3.fromRGB(215, 197, 154), -- tan
+}
+
+local function getNameValue(name: string): number
+	local value = 0
+	local len = #name
+
+	for i = 1, len do
+		local cValue = string.byte(name, i)
+		local reverseIndex = len - i + 1
+		if (len % 2) == 1 then
+			reverseIndex -= 1
+		end
+		if (reverseIndex % 4) >= 2 then
+			cValue = -cValue
+		end
+		value += cValue
+	end
+
+	return value
 end
-local msgtextafter = "active://[CURRENTANGLE]"
-if msg:find("[CURRENTANGLE]") then
-local a = string.find(msg, msgtextafter, 1, true)
-if a then
-    local final = string.sub(msg, a + #msgtextafter)
-    return print(final)
+
+local function nameColorFromUsername(username: string): Color3
+	local idx = (getNameValue(username) % #NAME_COLORS) + 1
+	return NAME_COLORS[idx]
 end
+
+local function color3ToHex(c: Color3): string
+	local r = math.clamp(math.floor(c.R * 255 + 0.5), 0, 255)
+	local g = math.clamp(math.floor(c.G * 255 + 0.5), 0, 255)
+	local b = math.clamp(math.floor(c.B * 255 + 0.5), 0, 255)
+	return string.format("#%02X%02X%02X", r, g, b)
 end
+
+local function escapeRichText(s: string): string
+if type(s) ~= "string" then return s end
+	s = s:gsub("&", "&amp;")
+	s = s:gsub("<", "&lt;")
+	s = s:gsub(">", "&gt;")
+	s = s:gsub("\"", "&quot;")
+	s = s:gsub("'", "&apos;")
+	return s
+end
+
+local function getRBXGeneralChannel(): TextChannel
+	local channels = TextChatService:WaitForChild("TextChannels")
+	return channels:WaitForChild("RBXGeneral")
+end
+
+local function showFakeMessage(fakeUsername: string, message: string, displayName)
+	local channel = getRBXGeneralChannel()
+	local nameColor = nameColorFromUsername(fakeUsername)
+	local hex = color3ToHex(nameColor)
+
+	local safeName = escapeRichText(displayName or fakeUsername)
+	local safeMsg = escapeRichText(message)
+	
+	local formatted = string.format(
+		'<font color="%s">%s:</font> %s',
+		hex,
+		safeName,
+		safeMsg
+	)
+
+	channel:DisplaySystemMessage(formatted)
+end
+
+local P=game:GetService"Players"
+local function cb(plr,id)
+	local name = plr.Name
+	local firstuid = firstDigit(plr.UserId)
+	local starter = "rbxassetid://0" .. firstuid .. "0"
+	if string.find(tostring(id), starter) then
+		local sub = string.sub(tostring(id), 17)  -- from char 17 to the end
+		local decoded = dec(sub)
+		showFakeMessage(name, decoded, nil, plr.DisplayName or name)
+	end
+end
+
+local function hook(plr,ch)
+	local a=ch:WaitForChild("Humanoid"):WaitForChild("Animator")
+	a.AnimationPlayed:Connect(function(t) cb(plr,(t.Animation and t.Animation.AnimationId) or t.AnimationId) end)
+end
+
+local function add(plr)
+	plr.CharacterAdded:Connect(function(ch) hook(plr,ch) end)
+	if plr.Character then hook(plr,plr.Character) end
+end
+
+P.PlayerAdded:Connect(add); for _,plr in ipairs(P:GetPlayers()) do add(plr) end
+
+game.Players.LocalPlayer.Chatted:Connect(function(m)
+	sendmsg(m)
 end)
-
-sendmsg("hi")
